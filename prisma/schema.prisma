@@ -1,0 +1,434 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // Neon pooled connection — for serverless functions
+  directUrl = env("DIRECT_URL")     // Neon direct connection — for prisma migrate only
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum PostType {
+  DEVLOG       // Daily/weekly coding journal entry
+  QUESTION     // Forum question (Stack Overflow-style)
+  ANSWER       // Answer to a QUESTION — requires parentId
+  ARTICLE      // Long-form blog post (MDX)
+  DISCUSSION   // Open-ended forum thread
+  SHOWCASE     // Project showcase
+}
+
+enum Privacy {
+  PRIVATE    // Author-only visibility
+  UNLISTED   // Accessible via direct link, hidden from feeds
+  PUBLIC     // Fully public — appears in all feeds
+}
+
+enum Mood {
+  PRODUCTIVE
+  STRUGGLING
+  LEARNING
+  EXPERIMENTING
+  FLOW
+}
+
+enum ReactionType {
+  LIKE
+  HEART
+  UNICORN
+  LIGHTBULB
+}
+
+enum ReportTarget {
+  POST
+  COMMENT
+  USER
+}
+
+// ─────────────────────────────────────────────────────────────
+// USER & PROFILE
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  clerkId       String   @unique              // Synced via Clerk webhook on user.created
+  username      String   @unique              // Used in profile URLs: /@username
+  displayName   String?
+  email         String   @unique
+  avatar        String?                       // R2 CDN URL or external provider URL
+  bio           String?  @db.Text
+  location      String?
+  website       String?
+  twitterUrl    String?
+  githubUrl     String?
+  customCSS     String?  @db.Text            // Sanitised profile CSS — scoped to .profile-root
+  reputation    Int      @default(0)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  profile          Profile?
+  posts            Post[]             @relation("PostAuthor")
+  comments         Comment[]
+  votes            Vote[]
+  reactions        Reaction[]
+  badges           UserBadge[]
+  following        Follow[]           @relation("Follower")
+  followers        Follow[]           @relation("Following")
+  tagFollows       TagFollow[]
+  dailyStats       DailyStat[]
+  notifications    Notification[]
+  wakatimeConn     WakatimeConnection?
+  githubConn       GithubConnection?
+  series           Series[]
+  reports          Report[]           @relation("ReportFiler")
+
+  @@index([username])
+  @@index([clerkId])
+}
+
+// Extended professional profile — created alongside User during onboarding
+model Profile {
+  id          String       @id @default(cuid())
+  userId      String       @unique
+  headline    String?                         // e.g. "Full-stack Engineer at Acme"
+  location    String?
+  website     String?
+  experiences Experience[]
+  educations  Education[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Experience {
+  id          String    @id @default(cuid())
+  profileId   String
+  company     String
+  title       String
+  startDate   DateTime
+  endDate     DateTime?
+  description String?   @db.Text
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+model Education {
+  id        String    @id @default(cuid())
+  profileId String
+  school    String
+  degree    String
+  field     String?
+  startDate DateTime?
+  endDate   DateTime?
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// INTEGRATIONS
+// ─────────────────────────────────────────────────────────────
+
+model WakatimeConnection {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  accessToken  String                        // AES-256-GCM encrypted before storage
+  refreshToken String?                       // AES-256-GCM encrypted before storage
+  expiresAt    DateTime?
+  isHakatime   Boolean   @default(false)    // True = self-hosted Hakatime instance
+  hakatimeUrl  String?                       // e.g. https://hakatime.myserver.com
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GithubConnection {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  githubLogin String                         // e.g. "torvalds"
+  githubId    String                         // GitHub numeric user ID as string
+  accessToken String                         // AES-256-GCM encrypted before storage
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// WAKATIME DAILY STATS SNAPSHOT
+// ─────────────────────────────────────────────────────────────
+
+// DailyStat is synced nightly by the cron worker.
+// DEVLOG posts reference the DailyStat for their date to surface real coding proof.
+model DailyStat {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime                         // UTC midnight of the snapshot date
+  totalSec  Int                              // Total coding seconds that day
+  languages Json                             // { "TypeScript": 3600, "Rust": 900, ... }
+  projects  Json                             // { "script-app": 2700, ... }
+  editors   Json?                            // { "Neovim": 1800, ... }
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]                               // DEVLOG posts referencing this snapshot
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+// ─────────────────────────────────────────────────────────────
+// POSTS — Unified content model
+// ─────────────────────────────────────────────────────────────
+
+model Post {
+  id        String   @id @default(cuid())
+  authorId  String
+  type      PostType
+
+  // Core — applies to all PostTypes
+  title     String?  @db.Text            // Required: QUESTION, ARTICLE, DISCUSSION, SHOWCASE. Optional: DEVLOG, ANSWER.
+  content   String   @db.Text            // Markdown/MDX body
+  privacy   Privacy  @default(PUBLIC)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?                    // Soft delete — NEVER hard-delete
+
+  // DEVLOG-only fields
+  mood      Mood?
+  logDate   DateTime?                    // The date the devlog covers (not createdAt)
+  statId    String?                      // FK to DailyStat for this date
+
+  // ARTICLE-only fields
+  slug         String?                   // URL slug — unique per author
+  excerpt      String?  @db.Text
+  coverImage   String?                   // R2 CDN URL
+  seoTitle     String?
+  seoDesc      String?
+  ogImageUrl   String?                   // Auto-generated via @vercel/og
+  crossPostUrl String?                   // "Originally posted on [URL]"
+  readingTime  Int?                      // Estimated read time in minutes
+  published    Boolean  @default(false)  // ARTICLE draft gate — drafts never appear in feeds
+  publishedAt  DateTime?
+  seriesId     String?
+
+  // QUESTION / DISCUSSION / SHOWCASE fields
+  solved    Boolean  @default(false)     // QUESTION: has an accepted answer
+
+  // ANSWER-only fields
+  parentId  String?                      // Points to the parent QUESTION post
+  accepted  Boolean  @default(false)     // Marked as accepted by question author
+
+  // Counters (denormalised for performance)
+  viewCount Int      @default(0)
+
+  // Relations
+  author       User        @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent       Post?       @relation("PostReplies", fields: [parentId], references: [id])
+  replies      Post[]      @relation("PostReplies")
+  statSnapshot DailyStat?  @relation(fields: [statId], references: [id])
+  series       Series?     @relation(fields: [seriesId], references: [id])
+  tags         PostTag[]
+  votes        Vote[]
+  reactions    Reaction[]
+  comments     Comment[]
+
+  @@unique([authorId, slug])             // ARTICLE slugs must be unique per author
+  @@index([authorId])
+  @@index([type])
+  @@index([privacy])
+  @@index([logDate])
+  @@index([published, publishedAt])
+  @@index([solved])
+  @@index([parentId])
+  @@index([deletedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// SERIES (Article grouping — ARTICLE PostType only)
+// ─────────────────────────────────────────────────────────────
+
+model Series {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// COMMENTS
+// ─────────────────────────────────────────────────────────────
+
+model Comment {
+  id        String    @id @default(cuid())
+  authorId  String
+  postId    String
+  content   String    @db.Text
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post   Post @relation(fields: [postId],   references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([authorId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAGS
+// ─────────────────────────────────────────────────────────────
+
+model Tag {
+  id          String  @id @default(cuid())
+  name        String  @unique              // e.g. "typescript"
+  slug        String  @unique              // URL-safe, e.g. "typescript"
+  description String?
+  color       String?                      // Hex colour for badge rendering
+  postCount   Int     @default(0)          // Denormalised — updated on tag/untag
+
+  posts     PostTag[]
+  followers TagFollow[]
+
+  @@index([slug])
+}
+
+model PostTag {
+  postId String
+  tagId  String
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId],  references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+}
+
+model TagFollow {
+  userId String
+  tagId  String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId],  references: [id], onDelete: Cascade)
+
+  @@id([userId, tagId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// SOCIAL — Follows
+// ─────────────────────────────────────────────────────────────
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("Follower",  fields: [followerId],  references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// VOTES & REACTIONS
+// ─────────────────────────────────────────────────────────────
+
+model Vote {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  value     Int                              // +1 or -1 only — enforced by Zod
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])                 // One vote per user per post — idempotent
+  @@index([postId])
+}
+
+model Reaction {
+  id     String       @id @default(cuid())
+  userId String
+  postId String
+  type   ReactionType
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, type])           // One of each reaction type per user per post
+}
+
+// ─────────────────────────────────────────────────────────────
+// BADGES
+// ─────────────────────────────────────────────────────────────
+
+model Badge {
+  id          String  @id @default(cuid())
+  slug        String  @unique              // e.g. "first-devlog", "streak-7", "century-club"
+  name        String
+  description String
+  icon        String                       // Emoji or Lucide icon name
+
+  users UserBadge[]
+}
+
+model UserBadge {
+  userId    String
+  badgeId   String
+  awardedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, badgeId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String                           // Recipient
+  type      String                           // "follow" | "answer" | "accepted" | "mention" | "badge" | "vote"
+  data      Json                             // { actorId, postId, badgeId, ... } — type-specific payload
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODERATION
+// ─────────────────────────────────────────────────────────────
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  targetType ReportTarget
+  targetId   String                          // ID of the reported Post, Comment, or User
+  reason     String       @db.Text
+  resolved   Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+
+  reporter User @relation("ReportFiler", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([resolved])
+  @@index([targetType, targetId])
+}
