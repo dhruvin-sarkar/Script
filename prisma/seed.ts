@@ -13,46 +13,40 @@ const COMMON_TAGS = [
 
 const BADGES = [
   {
-    id: 'first-devlog',
+    slug: 'first-devlog',
     name: 'First Devlog',
     description: 'Wrote your first development log.',
-    iconUrl: '/badges/first-devlog.svg',
-    points: 10,
+    icon: 'PenTool',
   },
   {
-    id: 'streak-7',
+    slug: 'streak-7',
     name: '7-Day Streak',
     description: 'Coded for 7 consecutive days.',
-    iconUrl: '/badges/streak-7.svg',
-    points: 20,
+    icon: 'Zap',
   },
   {
-    id: 'streak-30',
+    slug: 'streak-30',
     name: '30-Day Streak',
     description: 'Coded for 30 consecutive days.',
-    iconUrl: '/badges/streak-30.svg',
-    points: 100,
+    icon: 'Flame',
   },
   {
-    id: 'century-club',
+    slug: 'century-club',
     name: 'Century Club',
     description: 'Logged over 100 hours of coding.',
-    iconUrl: '/badges/century-club.svg',
-    points: 50,
+    icon: 'Trophy',
   },
   {
-    id: 'first-answer',
+    slug: 'first-answer',
     name: 'First Answer',
     description: 'Answered a question in the forum.',
-    iconUrl: '/badges/first-answer.svg',
-    points: 10,
+    icon: 'MessageSquareReply',
   },
   {
-    id: 'top-contributor',
+    slug: 'top-contributor',
     name: 'Top Contributor',
     description: 'Had 10 answers accepted in the forum.',
-    iconUrl: '/badges/top-contributor.svg',
-    points: 100,
+    icon: 'Award',
   },
 ];
 
@@ -62,10 +56,11 @@ async function main() {
   // Seed Tags
   console.log('Seeding tags...');
   for (const tagName of COMMON_TAGS) {
+    const slug = tagName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     await prisma.tag.upsert({
       where: { name: tagName },
       update: {},
-      create: { name: tagName },
+      create: { name: tagName, slug },
     });
   }
 
@@ -73,7 +68,7 @@ async function main() {
   console.log('Seeding badges...');
   for (const badge of BADGES) {
     await prisma.badge.upsert({
-      where: { id: badge.id },
+      where: { slug: badge.slug },
       update: badge,
       create: badge,
     });
