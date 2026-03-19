@@ -11,8 +11,11 @@ async function main() {
 
   for (const conn of connections) {
     try {
-      // Invalidate existing cache to force a refetch
-      await redis.del(`github:stats:${conn.userId}`);
+      await Promise.all([
+        redis.del(`github:repos:${conn.userId}`),
+        redis.del(`github:contributions:${conn.userId}`),
+        redis.del(`github:languages:${conn.userId}`),
+      ]);
 
       await fetchGithubStats(conn.userId);
       success++;
