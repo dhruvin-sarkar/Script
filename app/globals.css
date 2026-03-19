@@ -1,5 +1,4 @@
-@import "tailwindcss";
-@plugin "tailwindcss-animate";
+@import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -108,7 +107,7 @@
 }
 
 /* Light Mode Override */
-[data-theme="light"] {
+[data-theme='light'] {
   --bg-base: #f4f4f5;
   --bg-surface: #ffffff;
   --bg-elevated: #f9f9fa;
@@ -123,7 +122,7 @@
   --accent-dim: rgba(108, 92, 231, 0.1);
   --code-bg: #f1f0ff;
   --code-border: #ddd9ff;
-  
+
   --background: var(--bg-base);
   --foreground: var(--text-primary);
 }
@@ -156,8 +155,12 @@ body {
 
 /* Shimmer animation for skeleton loading */
 @keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
 }
 
 .skeleton {
@@ -200,9 +203,10 @@ body {
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--border);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--bg-base);
+    color: var(--text-primary);
   }
 }
