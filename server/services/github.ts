@@ -122,6 +122,15 @@ export interface GithubLanguageStat {
   count: number;
 }
 
+interface GithubPinnedRepoNode {
+  name: string;
+  description: string | null;
+  url: string;
+  stargazerCount: number;
+  forkCount: number;
+  primaryLanguage: { name: string; color: string } | null;
+}
+
 async function getAccessToken(userId: string): Promise<string | null> {
   const connection = await prisma.githubConnection.findUnique({
     where: { userId },
@@ -182,24 +191,15 @@ export async function getGithubRepos(userId: string): Promise<GithubRepo[] | nul
   const result = (await response.json()) as {
     data?: { user?: { pinnedItems?: { nodes?: unknown[] } } };
   };
-  const repos =
-    result.data?.user?.pinnedItems?.nodes?.map(
-      (repo: {
-        name: string;
-        description: string | null;
-        url: string;
-        stargazerCount: number;
-        forkCount: number;
-        primaryLanguage: { name: string; color: string } | null;
-      }) => ({
-        name: repo.name,
-        description: repo.description,
-        url: repo.url,
-        stars: repo.stargazerCount,
-        forks: repo.forkCount,
-        language: repo.primaryLanguage,
-      }),
-    ) || [];
+  const repoNodes = (result.data?.user?.pinnedItems?.nodes ?? []) as GithubPinnedRepoNode[];
+  const repos = repoNodes.map((repo) => ({
+    name: repo.name,
+    description: repo.description,
+    url: repo.url,
+    stars: repo.stargazerCount,
+    forks: repo.forkCount,
+    language: repo.primaryLanguage,
+  }));
 
   await redis.set(cacheKey, repos, { ex: 3600 });
   return repos;
@@ -350,4 +350,12 @@ export async function getGithubLanguageStats(userId: string): Promise<GithubLang
 
   await redis.set(cacheKey, stats, { ex: 3600 });
   return stats;
+}
+
+export async function fetchGithubStats(userId: string): Promise<void> {
+  await Promise.all([
+    getGithubRepos(userId),
+    getGithubContributions(userId),
+    getGithubLanguageStats(userId),
+  ]);
 }
