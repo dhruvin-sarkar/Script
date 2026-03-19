@@ -221,6 +221,7 @@ model Post {
 
   // QUESTION / DISCUSSION / SHOWCASE fields
   solved    Boolean  @default(false)     // QUESTION: has an accepted answer
+  devlogId  String?                      // Optional linked DEVLOG for forum context
 
   // ANSWER-only fields
   parentId  String?                      // Points to the parent QUESTION post
@@ -233,6 +234,8 @@ model Post {
   author       User        @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   parent       Post?       @relation("PostReplies", fields: [parentId], references: [id])
   replies      Post[]      @relation("PostReplies")
+  linkedDevlog Post?       @relation("ThreadDevlog", fields: [devlogId], references: [id])
+  linkedThreads Post[]     @relation("ThreadDevlog")
   statSnapshot DailyStat?  @relation(fields: [statId], references: [id])
   series       Series?     @relation(fields: [seriesId], references: [id])
   tags         PostTag[]
@@ -248,6 +251,7 @@ model Post {
   @@index([published, publishedAt])
   @@index([solved])
   @@index([parentId])
+  @@index([devlogId])
   @@index([deletedAt])
 }
 
@@ -377,7 +381,7 @@ model Reaction {
 
 model Badge {
   id          String  @id @default(cuid())
-  slug        String  @unique              // e.g. "first-devlog", "streak-7", "century-club"
+  slug        String  @unique              // e.g. "first-devlog", "streak-7", "100-hours"
   name        String
   description String
   icon        String                       // Emoji or Lucide icon name
@@ -403,7 +407,7 @@ model UserBadge {
 model Notification {
   id        String   @id @default(cuid())
   userId    String                           // Recipient
-  type      String                           // "follow" | "answer" | "accepted" | "mention" | "badge" | "vote"
+  type      String                           // "follow" | "answer" | "accepted" | "mention" | "badge" | "vote" | "new_post"
   data      Json                             // { actorId, postId, badgeId, ... } — type-specific payload
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
