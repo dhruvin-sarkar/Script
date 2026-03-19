@@ -2,15 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  Home, 
-  BookOpen, 
-  MessageSquare, 
-  Hash, 
-  User, 
-  TrendingUp, 
-  Layers
-} from 'lucide-react';
+import { useUser } from '@clerk/nextjs';
+import { Home, BookOpen, MessageSquare, Hash, User, TrendingUp, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
@@ -19,14 +12,16 @@ const NAV_ITEMS = [
   { label: 'Forum', icon: MessageSquare, href: '/forum' },
   { label: 'Blog', icon: Layers, href: '/articles' },
   { label: 'Tags', icon: Hash, href: '/tags' },
-  { label: 'Profile', icon: User, href: '/@jsmith' }, // Placeholder username
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useUser();
+
+  const profileLink = user?.username ? `/@${user.username}` : null;
 
   return (
-    <aside className="hidden lg:flex w-[220px] flex-col sticky top-[56px] h-[calc(100vh-56px)] py-6 px-4 gap-8">
+    <aside className="sticky top-[56px] hidden h-[calc(100vh-56px)] w-[220px] flex-col gap-8 px-4 py-6 lg:flex">
       <nav className="flex flex-col gap-1">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname === item.href;
@@ -37,34 +32,58 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium transition-all group",
-                isActive 
-                  ? "bg-[var(--accent-dim)] text-[var(--accent)]" 
-                  : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+                'group flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 font-medium text-[var(--text-sm)] transition-all',
+                isActive
+                  ? 'bg-[var(--accent-dim)] text-[var(--accent)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]',
               )}
             >
-              <Icon 
+              <Icon
                 className={cn(
-                  "h-5 w-5 transition-colors",
-                  isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]"
-                )} 
+                  'h-5 w-5 transition-colors',
+                  isActive
+                    ? 'text-[var(--accent)]'
+                    : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]',
+                )}
               />
               {item.label}
             </Link>
           );
         })}
+
+        {profileLink && (
+          <Link
+            href={profileLink}
+            className={cn(
+              'group flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 font-medium text-[var(--text-sm)] transition-all',
+              pathname === profileLink
+                ? 'bg-[var(--accent-dim)] text-[var(--accent)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]',
+            )}
+          >
+            <User
+              className={cn(
+                'h-5 w-5 transition-colors',
+                pathname === profileLink
+                  ? 'text-[var(--accent)]'
+                  : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]',
+              )}
+            />
+            Profile
+          </Link>
+        )}
       </nav>
 
       <div className="flex flex-col gap-4">
-        <h3 className="px-3 text-[var(--text-xs)] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+        <h3 className="px-3 font-bold tracking-wider text-[var(--text-muted)] text-[var(--text-xs)] uppercase">
           My Tags
         </h3>
         <div className="flex flex-col gap-1">
           {['typescript', 'nextjs', 'rust'].map((tag) => (
-            <Link 
-              key={tag} 
+            <Link
+              key={tag}
               href={`/tags/${tag}`}
-              className="px-3 py-1.5 rounded-[var(--radius-sm)] text-[var(--text-sm)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] transition-colors"
+              className="rounded-[var(--radius-sm)] px-3 py-1.5 text-[var(--text-secondary)] text-[var(--text-sm)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
             >
               # {tag}
             </Link>
