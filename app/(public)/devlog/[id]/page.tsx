@@ -12,7 +12,7 @@ export default async function DevlogDetailPage({ params }: { params: { id: strin
   const post = await prisma.post.findUnique({
     where: { id: params.id, type: "DEVLOG", deletedAt: null, privacy: "PUBLIC" },
     include: {
-      author: { select: { username: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+      author: { select: { username: true, displayName: true, avatar: true } },
       tags: { include: { tag: true } },
       statSnapshot: true,
     }
@@ -27,7 +27,7 @@ export default async function DevlogDetailPage({ params }: { params: { id: strin
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-4 tracking-tight">{post.title || "Daily Devlog"}</h1>
         <div className="flex flex-wrap items-center gap-3 text-muted-foreground text-sm font-medium">
-          <span className="text-foreground">{post.author.profile?.displayName || post.author.username}</span>
+          <span className="text-foreground">{post.author.displayName || post.author.username}</span>
           <span>&middot;</span>
           <span>{new Date(post.createdAt).toLocaleDateString()}</span>
           {post.mood && (

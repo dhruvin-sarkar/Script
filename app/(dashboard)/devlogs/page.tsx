@@ -4,11 +4,15 @@ import { api } from "@/app/providers";
 import { DevlogCard } from "@/components/post/DevlogCard";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useUser } from "@clerk/nextjs";
 
 export default function DevlogsPage() {
-  const { data, isLoading } = api.post.getMyPosts.useQuery({
-    type: "DEVLOG",
+  const { user } = useUser();
+  const { data, isLoading } = api.devlog.getByUser.useQuery({
+    authorId: user?.id ?? "",
     limit: 20
+  }, {
+    enabled: !!user?.id
   });
 
   return (

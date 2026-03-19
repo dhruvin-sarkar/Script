@@ -12,10 +12,10 @@ export function DevlogEditor() {
   const [tags, setTags] = useState("");
 
   const utils = trpc.useUtils();
-  const createPost = trpc.post.create.useMutation({
+  const createPost = trpc.devlog.create.useMutation({
     onSuccess: () => {
-      utils.post.getFeed.invalidate();
-      utils.post.getByUser.invalidate();
+      utils.devlog.getFeed.invalidate();
+      utils.devlog.getByUser.invalidate();
       router.push("/feed");
     }
   });
@@ -23,11 +23,11 @@ export function DevlogEditor() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createPost.mutate({
-      type: "DEVLOG",
       content,
       mood,
       tags: tags.split(",").map(t => t.trim()).filter(Boolean),
       privacy: "PUBLIC",
+      logDate: new Date(),
     });
   };
 
