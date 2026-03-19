@@ -1,66 +1,71 @@
-import { prisma } from "@/server/db";
-import { notFound } from "next/navigation";
-import { Thread } from "@/components/forum/Thread";
-import { PostType, Prisma } from "@prisma/client";
+import type { Metadata } from 'next';
+import { ForumThreadClient } from '@/components/forum/ForumThreadClient';
+import { createContext } from '@/server/context';
+import { prisma } from '@/server/db';
+import { appRouter } from '@/server/routers/_app';
+import { notFound } from 'next/navigation';
 
-export default async function ForumThreadPage({ params }: { params: { id: string } }) {
-  const question = await prisma.post.findUnique({
-    where: { 
-      id: params.id,
-      type: PostType.QUESTION,
-      deletedAt: null 
-    },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          avatar: true,
-        }
-      },
-      tags: {
-        include: {
-          tag: true
-        }
-      },
-      votes: true,
-      _count: {
-        select: { replies: true }
-      }
-    }
-  });
+interface ForumThreadPageProps {
+  params: Promise<{ id: string }>;
+}
 
-  if (!question) {
+export async function generateMetadata({ params }: ForumThreadPageProps): Promise<Metadata> {
+  const { id } = await params;
+  const caller = appRouter.createCaller(await createContext());
+
+  try {
+    const data = await caller.forum.getThread({ id, answersPage: 1 });
+    return {
+      title: `${data.thread.title ?? 'Forum'} — Script Forum`,
+    };
+  } catch {
+    return {
+      title: 'Thread not found — Script Forum',
+    };
+  }
+}
+
+export default async function ForumThreadPage({ params }: ForumThreadPageProps) {
+  const { id } = await params;
+  const context = await createContext();
+  const caller = appRouter.createCaller(context);
+
+  let data: Awaited<ReturnType<typeof caller.forum.getThread>>;
+  let similarThreads: Array<{ id: string; title: string | null }>;
+
+  try {
+    data = await caller.forum.getThread({ id, answersPage: 1 });
+    similarThreads = data.thread.tags.length
+      ? await prisma.post.findMany({
+          where: {
+            id: { not: id },
+            deletedAt: null,
+            tags: {
+              some: {
+                tag: {
+                  slug: {
+                    in: data.thread.tags.map((tag) => tag.slug),
+                  },
+                },
+              },
+            },
+          },
+          take: 4,
+          select: {
+            id: true,
+            title: true,
+          },
+        })
+      : [];
+  } catch {
     notFound();
   }
 
-  const answers = await prisma.post.findMany({
-    where: {
-      parentId: question.id,
-      type: PostType.ANSWER,
-      deletedAt: null
-    },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          avatar: true,
-        }
-      },
-      votes: true
-    },
-    orderBy: [
-      { accepted: "desc" },
-      { createdAt: "asc" }
-    ]
-  });
-
   return (
-    <div className="container max-w-5xl py-12 mx-auto px-4">
-      <Thread question={question as unknown as Prisma.PostGetPayload<{ include: { author: true, tags: { include: { tag: true } }, votes: true, _count: { select: { replies: true } } } }>} answers={answers as unknown as Prisma.PostGetPayload<{ include: { author: true, votes: true } }>[]} />
-    </div>
+    <ForumThreadClient
+      initialData={data}
+      currentUserId={context.userId}
+      similarThreads={similarThreads}
+    />
   );
 }
