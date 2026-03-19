@@ -1,125 +1,132 @@
 'use client';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/shared/Avatar';
+import { MarkdownPreview } from '@/components/shared/MarkdownPreview';
 import { Button } from '@/components/ui/button';
-import { api } from '@/app/providers';
 import { formatDistanceToNow } from 'date-fns';
-import { ChevronUp, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { VoteButtons } from './VoteButtons';
 
 interface AnswerCardProps {
-  answer: {
+  id: string;
+  content: string;
+  accepted: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  user: {
     id: string;
-    content: string;
-    createdAt: Date;
-    accepted: boolean;
-    author: {
-      id: string;
-      username: string;
-      displayName: string | null;
-      avatar: string | null;
-    };
-    votes: Array<{ userId: string; value: number }>;
+    username: string;
+    displayName: string | null;
+    avatar: string | null;
+    reputation: number;
   };
-  isQuestionAuthor: boolean;
-  questionSolved: boolean;
+  _count: { votes: number };
+  currentUserId: string | null;
+  threadAuthorId: string;
+  isThreadSolved: boolean;
+  userVote: 1 | -1 | null;
+  onAccept: (answerId: string) => void;
+  onVote: (answerId: string, value: 1 | -1) => void;
+  onDelete: (answerId: string) => void;
 }
 
-export function AnswerCard({ answer, isQuestionAuthor, questionSolved }: AnswerCardProps) {
-  const { user: clerkUser } = useUser();
-  const [votes, setVotes] = useState(answer.votes);
-
-  const totalVotes = votes.reduce((acc, vote) => acc + vote.value, 0);
-  // In a real app, we'd fetch the current user's local ID or compare with clerkId if stored in votes
-  const userVote = 0; // Simplified for now
-
-  const voteMutation = api.post.vote.useMutation();
-  const acceptMutation = api.post.acceptAnswer.useMutation({
-    onSuccess: () => {
-      window.location.reload();
-    },
-  });
-
-  const handleVote = (value: number) => {
-    voteMutation.mutate({ postId: answer.id, value });
-  };
-
-  const handleAccept = () => {
-    if (confirm('Accept this answer as the correct solution?')) {
-      acceptMutation.mutate({ answerId: answer.id });
-    }
-  };
+export function AnswerCard({
+  id,
+  content,
+  accepted,
+  createdAt,
+  updatedAt,
+  user,
+  _count,
+  currentUserId,
+  threadAuthorId,
+  isThreadSolved,
+  userVote,
+  onAccept,
+  onVote,
+  onDelete,
+}: AnswerCardProps) {
+  const isThreadAuthor = currentUserId === threadAuthorId;
+  const isAnswerAuthor = currentUserId === user.id;
 
   return (
-    <div
+    <article
       className={cn(
-        'flex gap-4 rounded-2xl border p-6 transition-all',
-        answer.accepted
-          ? 'bg-accent/5 border-accent ring-accent/20 shadow-sm ring-1'
-          : 'bg-card border-border',
+        'rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-5',
+        accepted ? 'border-l-[3px] border-l-[var(--success)]' : '',
       )}
     >
-      <div className="flex flex-col items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn('rounded-full', userVote === 1 && 'text-accent bg-accent/10')}
-          onClick={() => handleVote(1)}
-        >
-          <ChevronUp className="h-6 w-6" />
-        </Button>
-        <span className="text-lg font-bold tabular-nums">{totalVotes}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn('rounded-full', userVote === -1 && 'text-destructive bg-destructive/10')}
-          onClick={() => handleVote(-1)}
-        >
-          <ChevronDown className="h-6 w-6" />
-        </Button>
+      {accepted ? (
+        <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--success)]">
+          <CheckCircle2 className="h-4 w-4" />
+          Accepted Answer
+        </div>
+      ) : null}
 
-        {answer.accepted && (
-          <div className="text-accent mt-2">
-            <CheckCircle2 className="fill-accent/10 h-8 w-8" title="Accepted Answer" />
-          </div>
-        )}
-
-        {isQuestionAuthor && !questionSolved && !answer.accepted && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-accent hover:bg-accent/10 mt-2 rounded-full"
-            onClick={handleAccept}
-            disabled={acceptMutation.isPending}
-            title="Mark as accepted"
-          >
-            <CheckCircle2 className="h-6 w-6" />
-          </Button>
-        )}
-      </div>
-
-      <div className="flex-1 space-y-4">
-        <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
-          {answer.content}
+      <div className="flex gap-4">
+        <div className="w-12 shrink-0">
+          <VoteButtons
+            score={_count.votes}
+            userVote={userVote}
+            onVote={(value) => onVote(id, value)}
+            disabled={currentUserId === user.id}
+            disabledReason="Can't vote on your own post"
+          />
         </div>
 
-        <div className="border-border/50 flex items-center justify-between border-t pt-4">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={answer.author.avatar || undefined} />
-              <AvatarFallback>{answer.author.username[0].toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div className="text-xs">
-              <p className="text-primary font-bold">@{answer.author.username}</p>
-              <p className="text-muted-foreground">
-                answered {formatDistanceToNow(new Date(answer.createdAt))} ago
-              </p>
+        <div className="min-w-0 flex-1">
+          <MarkdownPreview content={content} />
+
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] pt-4">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user.avatar ?? undefined} alt={user.username} />
+                <AvatarFallback>{user.username[0]?.toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">@{user.username}</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  answered {formatDistanceToNow(new Date(createdAt), { addSuffix: true })} · rep{' '}
+                  {user.reputation}
+                  {updatedAt.getTime() !== createdAt.getTime()
+                    ? ` · updated ${formatDistanceToNow(new Date(updatedAt), { addSuffix: true })}`
+                    : ''}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {isThreadAuthor && !isThreadSolved && !accepted ? (
+                <Button size="sm" onClick={() => onAccept(id)}>
+                  Accept Answer
+                </Button>
+              ) : null}
+              {isAnswerAuthor ? (
+                <Button size="sm" variant="ghost">
+                  Edit
+                </Button>
+              ) : null}
+              {isAnswerAuthor ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-[var(--error)]"
+                  onClick={() => onDelete(id)}
+                >
+                  Delete
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </article>
+  );
+}
+
+export function AnswerCardSkeleton() {
+  return (
+    <div className="h-48 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)]/60" />
   );
 }
