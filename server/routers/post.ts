@@ -112,7 +112,7 @@ export const postRouter = router({
       const post = await ctx.prisma.post.findUnique({
         where: { id: input.id },
         include: {
-          author: { select: { username: true, id: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+          author: { select: { id: true, username: true, displayName: true, avatar: true } },
           tags: { include: { tag: true } },
           stats: true,
         }
@@ -146,7 +146,7 @@ export const postRouter = router({
         },
         orderBy: { createdAt: "desc" },
         include: {
-          author: { select: { username: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+          author: { select: { id: true, username: true, displayName: true, avatar: true } },
           tags: { include: { tag: true } },
         }
       });
@@ -177,7 +177,7 @@ export const postRouter = router({
       return { items };
     }),
 
-  getFeed: publicProcedure
+  getDiscover: publicProcedure
     .input(getPostsFilterSchema)
     .query(async ({ ctx, input }) => {
       const { limit, cursor, type, tag } = input;
@@ -193,7 +193,45 @@ export const postRouter = router({
         },
         orderBy: { createdAt: "desc" },
         include: {
-          author: { select: { username: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+          author: { select: { id: true, username: true, displayName: true, avatar: true } },
+          tags: { include: { tag: true } },
+        }
+      });
+
+      let nextCursor: typeof cursor | undefined = undefined;
+      if (items.length > limit) {
+        const nextItem = items.pop();
+        nextCursor = nextItem!.id;
+      }
+
+      return { items, nextCursor };
+    }),
+
+  getFeed: protectedProcedure
+    .input(getPostsFilterSchema)
+    .query(async ({ ctx, input }) => {
+      const { limit, cursor, type, tag } = input;
+      
+      // Get the IDs of users the current user is following
+      const following = await ctx.prisma.follow.findMany({
+        where: { followerId: ctx.userId },
+        select: { followingId: true }
+      });
+      const followingIds = following.map(f => f.followingId);
+
+      const items = await ctx.prisma.post.findMany({
+        take: limit + 1,
+        cursor: cursor ? { id: cursor } : undefined,
+        where: {
+          authorId: { in: followingIds },
+          type,
+          privacy: "PUBLIC",
+          deletedAt: null,
+          ...(tag ? { tags: { some: { tag: { name: tag } } } } : {}),
+        },
+        orderBy: { createdAt: "desc" },
+        include: {
+          author: { select: { id: true, username: true, displayName: true, avatar: true } },
           tags: { include: { tag: true } },
         }
       });
@@ -249,6 +287,78 @@ export const postRouter = router({
       });
     }),
 
+  getAnswers: publicProcedure
+    .input(z.object({ questionId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const answers = await ctx.prisma.post.findMany({
+        where: { parentId: input.questionId, type: "ANSWER", deletedAt: null },
+        orderBy: [
+          { accepted: "desc" },
+          { createdAt: "asc" }
+        ],
+        include: {
+          author: { select: { id: true, username: true, displayName: true, avatar: true } },
+          votes: true
+        }
+      });
+      return answers;
+    }),
+
+  acceptAnswer: protectedProcedure
+    .input(z.object({ answerId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { answerId } = input;
+      
+      const answer = await ctx.prisma.post.findUnique({
+        where: { id: answerId },
+        include: { parent: true }
+      });
+      
+      if (!answer || answer.type !== "ANSWER" || !answer.parentId) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      
+      if (!answer.parent || answer.parent.authorId !== ctx.userId) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Only the question author can accept an answer" });
+      }
+      
+      // Enforce only one accepted answer per question
+      const existingAccepted = await ctx.prisma.post.findFirst({
+        where: { parentId: answer.parentId, accepted: true }
+      });
+      if (existingAccepted) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Question already has an accepted answer" });
+      }
+
+      return await ctx.prisma.$transaction(async (tx) => {
+        // 1. Set answer.accepted = true
+        await tx.post.update({
+          where: { id: answerId },
+          data: { accepted: true }
+        });
+        
+        // 2. Set parent.solved = true
+        await tx.post.update({
+          where: { id: answer.parentId! },
+          data: { solved: true }
+        });
+        
+        // 3. Award +15 reputation to the answer author
+        await awardReputation(tx, answer.authorId, 15, "accepted");
+        
+        // 4. Create Notification
+        await tx.notification.create({
+          data: {
+            userId: answer.authorId,
+            type: "accepted",
+            data: { postId: answerId, message: "Your answer has been accepted!" },
+          }
+        });
+        
+        return { success: true };
+      });
+    }),
+
   incrementViews: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
@@ -271,7 +381,7 @@ export const postRouter = router({
       
       const existing = await ctx.prisma.reaction.findUnique({
         where: {
-          postId_userId_type: { postId, userId: ctx.userId, type: reaction }
+          userId_postId_type: { postId, userId: ctx.userId, type: reaction }
         }
       });
 
