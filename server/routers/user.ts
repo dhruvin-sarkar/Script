@@ -85,6 +85,11 @@ export const userRouter = router({
               educations: { orderBy: { startDate: 'desc' } },
             },
           },
+          githubConn: {
+            select: {
+              id: true,
+            },
+          },
           badges: { include: { badge: true } },
           _count: {
             select: { followers: true, following: true, posts: true },
@@ -111,14 +116,18 @@ export const userRouter = router({
       }
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { clerkId, ...safeUser } = user;
+      const { clerkId, githubConn, ...safeUser } = user;
 
       // Hide customCSS from other users
       if (ctx.userId !== user.id) {
         safeUser.customCSS = null;
       }
 
-      return { ...safeUser, isFollowing };
+      return {
+        ...safeUser,
+        githubConnection: githubConn,
+        isFollowing,
+      };
     }),
 
   updateAvatar: protectedProcedure
