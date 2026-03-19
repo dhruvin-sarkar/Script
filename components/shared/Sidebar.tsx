@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { label: 'Feed', icon: Home, href: '/feed' },
   { label: 'Devlogs', icon: BookOpen, href: '/devlogs' },
   { label: 'Forum', icon: MessageSquare, href: '/forum' },
-  { label: 'Blog', icon: Layers, href: '/articles' },
+  { label: 'Articles', icon: Layers, href: '/blog' },
   { label: 'Tags', icon: Hash, href: '/tags' },
 ];
 
