@@ -23,6 +23,10 @@ export const rateLimiters = {
     redis,
     limiter: Ratelimit.slidingWindow(100, '1 h'),
   }),
+  tagFollow: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(60, '1 h'),
+  }),
 };
 
 export async function enforceRateLimit(

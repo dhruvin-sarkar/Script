@@ -10,6 +10,8 @@ import { blogRouter } from './blog';
 import { forumRouter } from './forum';
 import { notificationRouter } from './notification';
 import { searchRouter } from './search';
+import { feedRouter } from './feed';
+import { tagRouter } from './tag';
 
 export const appRouter = router({
   health: healthRouter,
@@ -23,6 +25,8 @@ export const appRouter = router({
   forum: forumRouter,
   notification: notificationRouter,
   search: searchRouter,
+  feed: feedRouter,
+  tag: tagRouter,
 });
 
 export type AppRouter = typeof appRouter;

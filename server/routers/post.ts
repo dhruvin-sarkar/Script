@@ -88,6 +88,7 @@ export const postRouter = router({
 
   edit: protectedProcedure.input(editPostSchema).mutation(async ({ ctx, input }) => {
     const { id, tags, ...rest } = input;
+    void tags;
 
     const existing = await ctx.prisma.post.findUnique({ where: { id } });
     if (!existing || existing.authorId !== ctx.userId) {
@@ -146,7 +147,17 @@ export const postRouter = router({
         authorId,
         type,
         deletedAt: null,
-        ...(tag ? { tags: { some: { tag: { name: tag } } } } : {}),
+        ...(tag
+          ? {
+              tags: {
+                some: {
+                  tag: {
+                    OR: [{ name: tag }, { slug: tag.toLowerCase() }],
+                  },
+                },
+              },
+            }
+          : {}),
         privacy: ctx.userId === authorId ? privacy : 'PUBLIC',
       },
       orderBy: { createdAt: 'desc' },
@@ -192,7 +203,17 @@ export const postRouter = router({
         type,
         privacy: 'PUBLIC',
         deletedAt: null,
-        ...(tag ? { tags: { some: { tag: { name: tag } } } } : {}),
+        ...(tag
+          ? {
+              tags: {
+                some: {
+                  tag: {
+                    OR: [{ name: tag }, { slug: tag.toLowerCase() }],
+                  },
+                },
+              },
+            }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -228,7 +249,17 @@ export const postRouter = router({
         type,
         privacy: 'PUBLIC',
         deletedAt: null,
-        ...(tag ? { tags: { some: { tag: { name: tag } } } } : {}),
+        ...(tag
+          ? {
+              tags: {
+                some: {
+                  tag: {
+                    OR: [{ name: tag }, { slug: tag.toLowerCase() }],
+                  },
+                },
+              },
+            }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -382,7 +413,7 @@ export const postRouter = router({
       return { success: true };
     }),
 
-  getStreak: protectedProcedure.query(async ({ ctx }) => {
+  getStreak: protectedProcedure.query(async () => {
     return { streak: 0 };
   }),
 
