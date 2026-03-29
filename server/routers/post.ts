@@ -26,6 +26,40 @@ const getPostVoteDelta = (
     : { delta: -2, reason: 'post_downvoted' };
 };
 
+const PUBLIC_DISCOVERY_TYPES = [
+  PostType.DEVLOG,
+  PostType.QUESTION,
+  PostType.DISCUSSION,
+  PostType.SHOWCASE,
+] as const;
+
+function getPublicContentFilter(type?: PostType) {
+  if (!type) {
+    return {
+      OR: [
+        {
+          type: {
+            in: [...PUBLIC_DISCOVERY_TYPES],
+          },
+        },
+        {
+          type: PostType.ARTICLE,
+          published: true,
+        },
+      ],
+    };
+  }
+
+  if (type === PostType.ARTICLE) {
+    return {
+      type: PostType.ARTICLE,
+      published: true,
+    };
+  }
+
+  return { type };
+}
+
 export const postRouter = router({
   create: protectedProcedure.input(createPostSchema).mutation(async ({ ctx, input }) => {
     const { tags, ...rest } = input;
@@ -139,14 +173,15 @@ export const postRouter = router({
 
   getByUser: publicProcedure.input(getPostsFilterSchema).query(async ({ ctx, input }) => {
     const { limit, cursor, authorId, type, tag, privacy } = input;
+    const isOwner = ctx.userId === authorId;
 
     const items = await ctx.prisma.post.findMany({
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
       where: {
         authorId,
-        type,
         deletedAt: null,
+        ...(isOwner ? { type } : getPublicContentFilter(type)),
         ...(tag
           ? {
               tags: {
@@ -158,7 +193,7 @@ export const postRouter = router({
               },
             }
           : {}),
-        privacy: ctx.userId === authorId ? privacy : 'PUBLIC',
+        privacy: isOwner ? privacy : 'PUBLIC',
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -200,9 +235,9 @@ export const postRouter = router({
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
       where: {
-        type,
         privacy: 'PUBLIC',
         deletedAt: null,
+        ...getPublicContentFilter(type),
         ...(tag
           ? {
               tags: {
@@ -246,9 +281,9 @@ export const postRouter = router({
       cursor: cursor ? { id: cursor } : undefined,
       where: {
         authorId: { in: followingIds },
-        type,
         privacy: 'PUBLIC',
         deletedAt: null,
+        ...getPublicContentFilter(type),
         ...(tag
           ? {
               tags: {
