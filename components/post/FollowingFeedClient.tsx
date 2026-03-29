@@ -1,5 +1,6 @@
 'use client';
 
+import { keepPreviousData } from '@tanstack/react-query';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Compass, Layers3, Users2 } from 'lucide-react';
@@ -74,13 +75,19 @@ export function FollowingFeedClient() {
   const [page, setPage] = useState(1);
   const [isPending, startTransition] = useTransition();
 
-  const query = api.feed.getFollowing.useQuery({
-    filter,
-    page,
-    limit: 10,
-  });
+  const query = api.feed.getFollowing.useQuery(
+    {
+      filter,
+      page,
+      limit: 10,
+    },
+    {
+      placeholderData: keepPreviousData,
+    },
+  );
 
   const items = query.data?.items ?? [];
+  const isRefreshing = query.isFetching || isPending;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-8 xl:grid-cols-[minmax(0,1fr)_280px]">
@@ -151,7 +158,7 @@ export function FollowingFeedClient() {
           </TabsList>
 
           <TabsContent value={filter} className="space-y-6">
-            {query.isLoading || isPending ? (
+            {query.isLoading ? (
               <div className="space-y-5">
                 {Array.from({ length: 3 }).map((_, index) => (
                   <FeedCardSkeleton key={index} />
@@ -171,13 +178,14 @@ export function FollowingFeedClient() {
                 <FeedList items={items} />
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
                   <p className="text-sm text-[var(--text-secondary)]">
-                    Page {page}
-                    {query.data?.hasMore ? ' with more updates ready.' : ' is the latest page.'}
+                    {isRefreshing
+                      ? `Updating page ${page}...`
+                      : `Page ${page}${query.data?.hasMore ? ' with more updates ready.' : ' is the latest page.'}`}
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
-                      disabled={page === 1 || query.isFetching}
+                      disabled={page === 1 || isRefreshing}
                       onClick={() =>
                         startTransition(() => {
                           setPage((current) => Math.max(1, current - 1));
@@ -187,7 +195,7 @@ export function FollowingFeedClient() {
                       Previous
                     </Button>
                     <Button
-                      disabled={!query.data?.hasMore || query.isFetching}
+                      disabled={!query.data?.hasMore || isRefreshing || query.isPlaceholderData}
                       onClick={() =>
                         startTransition(() => {
                           setPage((current) => current + 1);

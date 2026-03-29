@@ -70,6 +70,41 @@ function getPostFilter(filter: FeedFilter): Prisma.PostWhereInput | null {
   }
 }
 
+function buildFollowingPostWhere(
+  filter: FeedFilter,
+  followingUserIds: string[],
+  followedTagIds: string[],
+): Prisma.PostWhereInput | null {
+  const postFilter = getPostFilter(filter);
+
+  if (postFilter === null || (followingUserIds.length === 0 && followedTagIds.length === 0)) {
+    return null;
+  }
+
+  const followTargets: Prisma.PostWhereInput[] = [
+    ...(followingUserIds.length > 0
+      ? [{ authorId: { in: followingUserIds } } satisfies Prisma.PostWhereInput]
+      : []),
+    ...(followedTagIds.length > 0
+      ? [
+          {
+            tags: {
+              some: {
+                tagId: {
+                  in: followedTagIds,
+                },
+              },
+            },
+          } satisfies Prisma.PostWhereInput,
+        ]
+      : []),
+  ];
+
+  return {
+    AND: [VISIBLE_POST_FILTER, postFilter, { OR: followTargets }],
+  };
+}
+
 export const feedRouter = router({
   getFollowing: protectedProcedure.input(followingFeedSchema).query(async ({ ctx, input }) => {
     const windowSize = input.page * input.limit;
@@ -86,37 +121,19 @@ export const feedRouter = router({
 
     const followingUserIds = followingUsers.map((follow) => follow.followingId);
     const followedTagIds = followedTags.map((tag) => tag.tagId);
-    const postFilter = getPostFilter(input.filter);
-    const shouldLoadPosts =
-      postFilter !== null && (followingUserIds.length > 0 || followedTagIds.length > 0);
+    const followingPostWhere = buildFollowingPostWhere(
+      input.filter,
+      followingUserIds,
+      followedTagIds,
+    );
+    const shouldLoadPosts = followingPostWhere !== null;
     const shouldLoadMilestones =
       (input.filter === 'all' || input.filter === 'milestones') && followingUserIds.length > 0;
 
     const [posts, milestones] = await Promise.all([
       shouldLoadPosts
         ? ctx.prisma.post.findMany({
-            where: {
-              ...VISIBLE_POST_FILTER,
-              ...postFilter,
-              OR: [
-                ...(followingUserIds.length > 0
-                  ? [{ authorId: { in: followingUserIds } } satisfies Prisma.PostWhereInput]
-                  : []),
-                ...(followedTagIds.length > 0
-                  ? [
-                      {
-                        tags: {
-                          some: {
-                            tagId: {
-                              in: followedTagIds,
-                            },
-                          },
-                        },
-                      } satisfies Prisma.PostWhereInput,
-                    ]
-                  : []),
-              ],
-            },
+            where: followingPostWhere,
             orderBy: { createdAt: 'desc' },
             take: windowSize + 1,
             select: {
