@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { Home, BookOpen, MessageSquare, Hash, User, TrendingUp, Layers } from 'lucide-react';
+import { Home, BookOpen, MessageSquare, Hash, User, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TrendingTagsWidget } from './TrendingTagsWidget';
 
 const NAV_ITEMS = [
   { label: 'Feed', icon: Home, href: '/feed' },
@@ -74,21 +75,8 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="flex flex-col gap-4">
-        <h3 className="px-3 font-bold tracking-wider text-[var(--text-muted)] text-[var(--text-xs)] uppercase">
-          My Tags
-        </h3>
-        <div className="flex flex-col gap-1">
-          {['typescript', 'nextjs', 'rust'].map((tag) => (
-            <Link
-              key={tag}
-              href={`/tags/${tag}`}
-              className="rounded-[var(--radius-sm)] px-3 py-1.5 text-[var(--text-secondary)] text-[var(--text-sm)] transition-colors hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
-            >
-              # {tag}
-            </Link>
-          ))}
-        </div>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-surface)] py-4">
+        <TrendingTagsWidget compact />
       </div>
     </aside>
   );
