@@ -1,7 +1,8 @@
 'use client';
 
 import type { inferRouterOutputs } from '@trpc/server';
-import { useDeferredValue, useState } from 'react';
+import { keepPreviousData } from '@tanstack/react-query';
+import { useDeferredValue, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Hash, Search, Sparkles } from 'lucide-react';
 import { api } from '@/app/providers';
@@ -59,6 +60,7 @@ function TagCardSkeleton() {
 export function TagDiscoveryClient() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [isPending, startTransition] = useTransition();
   const deferredSearch = useDeferredValue(search);
   const trimmedQuery = deferredSearch.trim();
   const isSearching = trimmedQuery.length > 0;
@@ -70,6 +72,7 @@ export function TagDiscoveryClient() {
     },
     {
       enabled: !isSearching,
+      placeholderData: keepPreviousData,
     },
   );
 
@@ -87,6 +90,7 @@ export function TagDiscoveryClient() {
   const isLoading = isSearching ? searchQuery.isLoading : listQuery.isLoading;
   const isError = isSearching ? searchQuery.isError : listQuery.isError;
   const errorMessage = isSearching ? searchQuery.error?.message : listQuery.error?.message;
+  const isRefreshing = !isSearching && (listQuery.isFetching || isPending);
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
@@ -187,23 +191,32 @@ export function TagDiscoveryClient() {
         {!isSearching && items.length ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
             <p className="text-sm text-[var(--text-secondary)]">
-              Page {page}
-              {listQuery.data?.hasMore ? ' with more tags ready.' : ' shows everything so far.'}
+              {isRefreshing
+                ? `Updating page ${page}...`
+                : `Page ${page}${listQuery.data?.hasMore ? ' with more tags ready.' : ' shows everything so far.'}`}
             </p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={page === 1 || listQuery.isFetching}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page === 1 || isRefreshing}
+                onClick={() =>
+                  startTransition(() => {
+                    setPage((current) => Math.max(1, current - 1));
+                  })
+                }
               >
                 Previous
               </button>
               <button
                 type="button"
                 className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!listQuery.data?.hasMore || listQuery.isFetching}
-                onClick={() => setPage((current) => current + 1)}
+                disabled={!listQuery.data?.hasMore || isRefreshing || listQuery.isPlaceholderData}
+                onClick={() =>
+                  startTransition(() => {
+                    setPage((current) => current + 1);
+                  })
+                }
               >
                 Next
               </button>
