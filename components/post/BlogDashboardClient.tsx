@@ -74,7 +74,10 @@ export function BlogDashboardClient() {
                 viewCount={article.viewCount}
                 tags={article.tags.map((tag) => tag.tag)}
               />
-              <Link href={`/blog/${article.id}/edit`} className="text-sm text-[var(--accent)]">
+              <Link
+                href={`/blog/manage/${article.id}/edit`}
+                className="text-sm text-[var(--accent)]"
+              >
                 Edit article
               </Link>
             </div>
