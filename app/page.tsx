@@ -1,4 +1,4 @@
-import { SignUpButton, SignInButton } from '@clerk/nextjs';
+import { HomeAuthCtas } from '@/components/shared/HomeAuthCtas';
 
 export default function HomePage() {
   return (
@@ -17,19 +17,7 @@ export default function HomePage() {
         The developer platform for logging, learning, and connecting.
       </p>
 
-      <div className="flex items-center gap-4">
-        <SignUpButton mode="modal">
-          <button className="cursor-pointer rounded-[var(--radius-md)] bg-[var(--accent)] px-8 py-3 text-base font-medium text-white transition-colors duration-150 hover:bg-[var(--accent-hover)]">
-            Get Started
-          </button>
-        </SignUpButton>
-
-        <SignInButton mode="modal">
-          <button className="cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-transparent px-8 py-3 text-base font-medium text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--bg-elevated)]">
-            Sign In
-          </button>
-        </SignInButton>
-      </div>
+      <HomeAuthCtas />
 
       <p className="mt-24 text-sm text-[var(--text-muted)]">Built by developers, for developers.</p>
     </div>
