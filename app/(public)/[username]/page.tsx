@@ -11,19 +11,29 @@ import { StreakWidget } from '@/components/stats/StreakWidget';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DevlogCard } from '@/components/post/DevlogCard';
 
+type ProfilePageParams = Promise<{ username: string }>;
+
+const decodeUsernameParam = (username: string): string =>
+  decodeURIComponent(username).replace(/^@/, '');
+
 export async function generateMetadata({
   params,
 }: {
-  params: { username: string };
+  params: ProfilePageParams;
 }): Promise<Metadata> {
-  const decodedUsername = decodeURIComponent(params.username).replace(/^@/, '');
-  const user = await prisma.user.findUnique({ where: { username: decodedUsername } });
+  const { username } = await params;
+  const decodedUsername = decodeUsernameParam(username);
+  const user = await prisma.user.findUnique({
+    where: { username: decodedUsername, deletedAt: null },
+    select: { username: true, displayName: true },
+  });
   if (!user) return { title: 'User Not Found' };
   return { title: `${user.displayName || user.username} (@${user.username}) - Script` };
 }
 
-export default async function ProfilePage({ params }: { params: { username: string } }) {
-  const decodedUsername = decodeURIComponent(params.username).replace(/^@/, '');
+export default async function ProfilePage({ params }: { params: ProfilePageParams }) {
+  const { username } = await params;
+  const decodedUsername = decodeUsernameParam(username);
   const { userId: clerkId } = await auth();
 
   const user = await prisma.user.findUnique({
